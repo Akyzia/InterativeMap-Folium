@@ -1,0 +1,115 @@
+#antes de importar, eu preciso instalar as bibliotecas da plataforma Anaconda no CMD.exe Prompt do software
+#depois de instaladas não preciso mais instalar
+#para instalar, escrever no cmd "conda install pip" e dar enter, depois escrever "y" e dar enter, depois escrever 
+#"conda install folium -c conda-forge" e dar enter, depois escrever "y" e dar enter
+#pronto, instalado, agora é só importar aqui no Notebook
+import folium
+from folium import plugins
+from folium.plugins import Geocoder
+from folium.plugins import FloatImage
+import base64
+import folium
+import geopandas as gpd
+import pandas as pd
+from folium.plugins import MiniMap
+       
+#aqui eu puxo o limite da área desejada / nesse caso eu puxei um shapefile
+mun = gpd.read_file(r"Mun_Roraima.shp")
+
+mun = mun.to_crs(epsg=4674)
+print(mun.crs)
+mun.head()
+mun.plot(figsize=(6, 6))
+
+#aqui eu puxo o arquivo.csv, o "sep" é a variavel que criei para indicar que a separação dos dados é a virgula
+#com encoding "latin-1"  o python leu corretamente
+tabela = pd.read_csv("teste_coord.csv",encoding='latin-1', sep=";")
+
+#aqui posso usar o "display" no lugar de 'print' para a tabela ficar mais bonita (Só se eu estiver usando Jupyter)
+display(tabela)
+
+#aqui eu centralizo o mapa com um localização que eu tenho ali nas coordenadas, estabeleço um zoom e deixo a escala aparecendo
+#depois posso centralizar mais pegando uma coordenada no layer através do codigo abaixo
+m = folium.Map(location =[2.82, -60.69],zoom_start = 6, control_scale = True, tiles = "cartodbpositron")
+
+for _, r in mun.iterrows():
+    # Without simplifying the representation of each borough,
+    # the map might not be displayed
+    sim_geo = gpd.GeoSeries(r['geometry']).simplify(tolerance=0.001)
+    geo_j = sim_geo.to_json()
+    geo_j = folium.GeoJson(data=geo_j,
+                           style_function=lambda x: {'fillColor': 'red'})
+    folium.Popup(r['NM_MUN']).add_to(geo_j)
+    geo_j.add_to(m)
+m
+
+#aqui eu centralizo o mapa com um localização que eu tenho ali nas coordenadas, estabeleço um zoom e deixo a escala aparecendo
+#depois posso centralizar mais pegando uma coordenada no layer através do codigo abaixo
+#m = folium.Map(location =[-27.3327,-50.3394],zoom_start = 6, control_scale = True, tiles = "cartodbpositron")
+
+#aqui eu adiciono um basemap do Leaflet Provider Demo, lin: https://leaflet-extras.github.io/leaflet-providers/preview/
+folium.TileLayer("cartodbpositron").add_to(m)
+
+#no Leaflet Provider Demo eu posso escolher uma basemap que quero, até mais de uma, basta acrescentar aqui com o comando folium.TileLayer
+folium.TileLayer(tiles = 'https://server.arcgisonline.com/ArcGIS/rest/services/Specialty/DeLorme_World_Base_Map/MapServer/tile/{z}/{y}/{x}',
+                 attr = 'Tiles &copy; Esri &mdash; Copyright: &copy;2012 DeLorme',
+                 name = "Esri.DeLorme").add_to(m)
+
+folium.LayerControl().add_to(m)
+
+#aqui eu ploto meu layer
+m
+
+#para adicionar meus pontos ao layer, devo utilizar o comando "for i in range", posso definir o icone através de uma biblioteca de
+#icones, basta acessar o link https://getbootstrap.com/docs/3.3/components/
+for i in range(len(estacoes_coord)):
+    coordenada = estacoes_coord[i]
+    estacoes = estacoes_nomes[i]
+    folium.Marker(coordenada,popup=estacoes, icon = folium.Icon(icon = "glyphicon glyphicon-globe",
+                                                               color = "lightblue",
+                                                               icon_color = "blue",
+                                                               prefix = "glyphicon")).add_to(m)
+    
+#aqui eu centralizo o mapa, utilizando um plugin, conseguindo obter a latitude e a Longitude quando clicar em qualquer parte
+#layer
+m.add_child(folium.LatLngPopup())
+
+#aqui eu adiciono uma caixa de busca no layer, configurando sua posição e o marcador (se deve ou não aparecer no local que eu buscar)
+Geocoder(collapsed = True, position = "topleft", add_marker = True).add_to(m)
+
+#aqui eu vou conseguir decodificar a imagem como uma imagem salva no computador e não como um link
+#antes disso, preciso salvar a imagem em png lá do link onde peguei ela (salvar na mesma pasta desse código)
+#preciso reduzir o tamanho dela para não ficar assim tão grande
+#olhar o codigo onde eu insiro a rosa dos ventos no mapa do folium ------------------------LER-------------------
+nome_do_arquivo = "Compass_rose2.png"
+
+#aqui o "rb" informa par ao base64 que a imagem deve ser lida como binária / depois é preciso transformar a imagem em utf-8
+#peço para o base lê o binário e converte para utf-8
+with open(nome_do_arquivo, "rb") as arquivo_imagem:
+    string_imagem = base64.b64encode(arquivo_imagem.read()).decode("utf-8")
+
+#print(string_imagem)
+
+#adicionando a imagem em formato de string
+#preciso informar que essa imagem é em formato png e foi convertida para o base64
+FloatImage("data:image/png; base64, {}".format(string_imagem), Bottom = 0, left = 92).add_to(m)
+
+#adicionando um título e configurando a formatação dele
+titulo = "Estações Meteorológicas de Roraima"
+titulo_html = """<h1 align = "center", style="font-family: verdana; font-size:14px;
+font-wight:bold; background-color: black; color: white; padding:10px; text-transfore: uppercase;">{}</h1>""".format(titulo)
+m.get_root().html.add_child(folium.Element(titulo_html))
+
+
+#aqui eu configuro o minimapa como eu quero, sua posição / função "toggle_display" que possibilita a minimização do minimap ao clicar nela
+#se eu colocar "auto_toggle_display" ao invés de toggle_display, o minimapa desaparece automaticamente, sem eu precisar clicar na flechinha
+#com a função "zoom_level_fixed" eu fixo o minimapa na área que eu quiser
+MiniMap(tiles_layer="cartodbpositron", position = "bottomleft", toggle_display = True, zoom_level_fixed = 8).add_to(m)
+
+
+#aqui eu salvo o mapa como html, escolhendo um nome para ele
+m.save("Estações Meteorológicas de Roraima.html")
+
+
+#aqui eu ploto meu layer    
+m
